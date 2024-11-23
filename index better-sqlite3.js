@@ -1,10 +1,10 @@
-import { Database } from "bun:sqlite";
-import puppeteer from "puppeteer-core";
-import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer";
-import { v4 as uuidv4 } from "uuid";
-import fs from "fs";
-import path from "path";
-import readline from "readline";
+const { Database } = require("bun:sqlite");
+const puppeteer = require("puppeteer-core");
+const { PuppeteerBlocker } = require("@ghostery/adblocker-puppeteer");
+const { v4: uuidv4 } = require("uuid");
+const fs = require("fs");
+const path = require("path");
+const readline = require("readline");
 
 const config = JSON.parse(fs.readFileSync("./config.json", "utf8"));
 if (!fs.existsSync(config.screenshotDir)) {
@@ -16,39 +16,27 @@ let browser;
 let page;
 
 // Database Initialization
-const db = new Database("./database.db");
-db.run("PRAGMA journal_mode = WAL;");
-
-db.run(`
+const db = new Database("./database.db", { verbose: console.log });
+db.pragma("journal_mode = WAL");
+db.exec(`
   CREATE TABLE IF NOT EXISTS sites (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uuid TEXT NOT NULL UNIQUE,
     url TEXT NOT NULL,
     domain TEXT NOT NULL,
     screenshotPath TEXT,
-    createdTime DATETIME DEFAULT CURRENT_TIMESTAMP,
-    modifiedTime DATETIME DEFAULT CURRENT_TIMESTAMP,
+    createdTime TEXT NOT NULL,
+    modifiedTime TEXT,
     currentlyBeingModified INTEGER DEFAULT 0,
     retryCount INTEGER DEFAULT 0
   )
-`);
-
-db.run(`
-  CREATE TRIGGER IF NOT EXISTS update_modified_time
-  AFTER UPDATE ON sites
-  FOR EACH ROW
-  BEGIN
-    UPDATE sites
-    SET modifiedTime = CURRENT_TIMESTAMP
-    WHERE id = NEW.id;
-  END;
 `);
 
 // Initialize Puppeteer
 async function initializeBrowser() {
   const executablePath = config.browserPath;
   console.log(`Using browser at: ${executablePath}`);
-  browser = await puppeteer.launch({
+  await puppeteer.launch({
     product: "chrome",
     executablePath,
     headless: false
@@ -58,12 +46,14 @@ async function initializeBrowser() {
 // Add Site to Database
 function addSite(url) {
   const domain = new URL(url).hostname;
+  const now = new Date().toISOString();
   const uuid = uuidv4();
 
   try {
-    db.run(`
-      INSERT INTO sites (uuid, url, domain) VALUES (?, ?, ?)
-    `, [uuid, url, domain]);
+    db.prepare(`
+      INSERT INTO sites (uuid, url, domain, createdTime, modifiedTime) 
+      VALUES (?, ?, ?, ?, ?)
+    `).run(uuid, url, domain, now, now);
     console.log(`Added: ${url}`);
   } catch (err) {
     console.error(`Error adding site: ${err.message}`);
@@ -85,7 +75,7 @@ async function processSites() {
   processingState = "running";
 
   const selectSiteStmt = db.prepare(`
-    SELECT * FROM sites WHERE screenshotPath IS NULL AND currentlyBeingModified = 0 AND retryCount < ? LIMIT 1
+    SELECT * FROM sites WHERE screenshotPath IS NULL AND currentlyBeingModified = 0 AND retryCount < ${config.retries} LIMIT 1
   `);
 
   const updateSiteStmt = db.prepare(`
@@ -93,16 +83,24 @@ async function processSites() {
   `);
 
   const completeSiteStmt = db.prepare(`
-    UPDATE sites SET screenshotPath = ?, modifiedTime = CURRENT_TIMESTAMP, currentlyBeingModified = 0 WHERE id = ?
+    UPDATE sites SET screenshotPath = ?, modifiedTime = ?, currentlyBeingModified = 0 WHERE id = ?
   `);
 
   const resetSiteStmt = db.prepare(`
     UPDATE sites SET currentlyBeingModified = 0, retryCount = retryCount + 1 WHERE id = ?
   `);
 
+  const addRetriesStmt = db.prepare(`
+    UPDATE sites SET currentlyBeingModified = 0, retryCount = retryCount + 1 WHERE id = ?
+  `);
+
+  //const skipSiteStmt = db.prepare(`
+  //  UPDATE sites SET currentlyBeingModified = 0, retryCount = 3 WHERE id = ?
+  //`);
+
   while (processingState === "running") {
-    const row = selectSiteStmt.get(config.retries);
-    if (!row) {
+    const row = selectSiteStmt.get();
+    if (!row) {      
       console.log("No sites to process. Pausing...");
       processingState = "paused";
       continue;
@@ -112,12 +110,12 @@ async function processSites() {
 
     let newPage;
     try {
+      currentJob = url;
       updateSiteStmt.run(id);
 
       const screenshotPath = path.join(config.screenshotDir, `${uuid}.png`);
       newPage = await browser.newPage();
       console.log(`Navigating to URL: ${url}`);
-      currentJob = `Navigating to ${url}`;
 
       // Attach adblocker to the new page
       const blocker = await PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch);
@@ -129,17 +127,22 @@ async function processSites() {
       // Navigate and take a screenshot
       await newPage.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
       console.log(`Taking screenshot: ${screenshotPath}`);
-      currentJob = `Taking screenshot of ${url}`;
       await newPage.screenshot({ path: screenshotPath });
       console.log(`Screenshot saved: ${screenshotPath}`);
-      currentJob = "none";
-      completeSiteStmt.run(screenshotPath, id);
+
+      const now = new Date().toISOString();
+      completeSiteStmt.run(screenshotPath, now, id);
     } catch (error) {
       console.error(`Failed to process ${url}:`, error.message);
-      resetSiteStmt.run(id);
+      if (retryCount + 1 >= 3) {
+        console.log(`Skipping ${url} after ${retryCount} failed attempts.`);
+        addRetriesStmt.run(id);
+      } else {
+        resetSiteStmt.run(id);
+      }
     } finally {
       if (newPage) {
-        await newPage.close();
+        await newPage.close(); // Ensure the tab is closed after processing
       }
     }
 
@@ -196,10 +199,6 @@ async function handleCommand(command) {
         console.error("Usage: import <filename>");
       }
       break;
-    
-    case "status":
-      console.log(`Processing State: ${processingState}`);
-      console.log(`Current Job: ${currentJob}`);
 
     case "start":
       if (processingState === "running") {
@@ -226,19 +225,26 @@ async function handleCommand(command) {
     case "exit":
       processingState = "stopped";
       if (currentJob !== "none") {
-        console.log("Waiting for current job to finish...");
+        console.log("Waiting for last job to end...");
       } else {
         console.log("Exiting...");
         if (browser) {
           await browser.close();
         }
         db.close();
-        process.exit(0);
+        process.exit();
       }
+      
+      break;
+      //if (browser) {
+      //  await browser.close();
+      //}
+      //db.close();
+      //process.exit();
 
     default:
       console.log(
-        "Unknown command. Commands: add <URL>, import <filename>, status, start, pause, resume, clear, exit"
+        "Unknown command. Commands: add <URL>, import <filename>, start, pause, resume, clear, exit"
       );
   }
 }
@@ -265,11 +271,13 @@ async function startTerminalInterface() {
   startTerminalInterface();
 })();
 
-setInterval(() => {
-  const walSize = fs.existsSync("database.db-wal")
-    ? fs.statSync("database.db-wal").size
-    : 0;
-  if (walSize > 64 * 1024 * 1024) {
-    db.run("PRAGMA wal_checkpoint(RESTART)");
-  }
-}, 5000).unref();
+setInterval(
+  fs.stat.bind(null, "database.db-wal", (err, stat) => {
+    if (err) {
+      if (err.code !== "ENOENT") throw err;
+    } else if (stat.size > 64 * 1024 * 1024) {
+      db.pragma("wal_checkpoint(RESTART)");
+    }
+  }),
+  5000
+).unref();
