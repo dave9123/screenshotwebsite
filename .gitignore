@@ -1,3 +1,4 @@
 .git
 node_modules
-database.db
+database.db*
+screenshots

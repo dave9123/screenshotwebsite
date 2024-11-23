@@ -1,5 +1,6 @@
-const sqlite3 = require("sqlite3").verbose();
+const Database = require("better-sqlite3");
 const puppeteer = require("puppeteer-core");
+const { PuppeteerBlocker } = require("@ghostery/adblocker-puppeteer");
 const { v4: uuidv4 } = require("uuid");
 const fs = require("fs");
 const path = require("path");
@@ -14,9 +15,10 @@ let browser;
 let page;
 
 // Database Initialization
-const db = new sqlite3.Database("./database.db");
+const db = new Database("./database.db", { verbose: console.log });
 db.pragma("journal_mode = WAL");
-db.run(`CREATE TABLE IF NOT EXISTS sites (
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sites (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uuid TEXT NOT NULL UNIQUE,
     url TEXT NOT NULL,
@@ -25,48 +27,26 @@ db.run(`CREATE TABLE IF NOT EXISTS sites (
     createdTime TEXT NOT NULL,
     modifiedTime TEXT,
     currentlyBeingModified INTEGER DEFAULT 0
-)`);
-
-// Auto-Discover Browsers
-async function discoverBrowsers() {
-  console.log("Discovering available browsers...");
-  const browserFetcher = puppeteer.createBrowserFetcher();
-  const revisions = await browserFetcher.localRevisions();
-  if (revisions.length > 0) {
-    console.log("Available browsers:");
-    revisions.forEach((revision, index) =>
-      console.log(`${index + 1}: Revision ${revision}`)
-    );
-    return browserFetcher.revisionInfo(revisions[0]).executablePath;
-  } else {
-    console.log("No local browsers found.");
-    const downloadBrowser = (await askUser(
-      "No local browsers found. Do you want to download a browser? (yes/no): "
-    ));
-    if (downloadBrowser.toLowerCase() === "yes") {
-      const browserName = (await askUser(
-        "Enter the name of the browser you want to use (e.g., chrome, firefox): "
-      ));
-      const browserFetcher = puppeteer.createBrowserFetcher({
-        product: browserName,
-      });
-      const revisionInfo = await browserFetcher.download("latest");
-      return revisionInfo.executablePath;
-    } else {
-      const customPath = (await askUser(
-        "Enter path to a browser executable: "
-      ));
-      return customPath.trim();
-    }
-  }
-}
+  )
+`);
 
 // Initialize Puppeteer
 async function initializeBrowser() {
-  const executablePath = await discoverBrowsers();
+  const executablePath = config.browserPath;
   console.log(`Using browser at: ${executablePath}`);
-  browser = await puppeteer.launch({ executablePath });
+  browser = await puppeteer.launch({
+    product: "chrome",
+    executablePath,
+    headless: false
+  });
   page = await browser.newPage();
+
+  // Load and enable the adblocker
+  const blocker = await PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch);
+  blocker.enableBlockingInPage(page);
+
+  // Set User-Agent from config
+  await page.setUserAgent(config.userAgent);
 }
 
 // Add Site to Database
@@ -75,17 +55,15 @@ function addSite(url) {
   const now = new Date().toISOString();
   const uuid = uuidv4();
 
-  db.run(
-    `INSERT INTO sites (uuid, url, domain, createdTime, modifiedTime) VALUES (?, ?, ?, ?, ?, ?)`,
-    [uuid, url, domain, now, now],
-    (err) => {
-      if (err) {
-        console.error(`Error adding site: ${err.message}`);
-      } else {
-        console.log(`Added: ${url}`);
-      }
-    }
-  );
+  try {
+    db.prepare(`
+      INSERT INTO sites (uuid, url, domain, createdTime, modifiedTime) 
+      VALUES (?, ?, ?, ?, ?)
+    `).run(uuid, url, domain, now, now);
+    console.log(`Added: ${url}`);
+  } catch (err) {
+    console.error(`Error adding site: ${err.message}`);
+  }
 }
 
 // Import Links from File
@@ -101,50 +79,73 @@ function importLinksFromFile(filename) {
 // Process Sites
 async function processSites() {
   processingState = "running";
-  db.each(
-    `SELECT * FROM sites WHERE screenshotPath IS NULL AND currentlyBeingModified = 0 LIMIT 1`,
-    async (err, row) => {
-      if (err) {
-        console.error("Error fetching site:", err.message);
-        return;
-      }
 
-      const { id, url, uuid } = row;
+  const selectSiteStmt = db.prepare(`
+    SELECT * FROM sites WHERE screenshotPath IS NULL AND currentlyBeingModified = 0 LIMIT 1
+  `);
 
-      try {
-        db.run(`UPDATE sites SET currentlyBeingModified = 1 WHERE id = ?`, [
-          id,
-        ]);
+  const updateSiteStmt = db.prepare(`
+    UPDATE sites SET currentlyBeingModified = 1 WHERE id = ?
+  `);
 
-        while (processingState === "paused") {
-          console.log("Paused. Waiting to resume...");
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
+  const completeSiteStmt = db.prepare(`
+    UPDATE sites SET screenshotPath = ?, modifiedTime = ?, currentlyBeingModified = 0 WHERE id = ?
+  `);
 
-        if (processingState === "stopped") {
-          console.log("Stopped. Exiting...");
-          await db.close();
-          return;
-        }
+  const resetSiteStmt = db.prepare(`
+    UPDATE sites SET currentlyBeingModified = 0 WHERE id = ?
+  `);
 
-        await page.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
-        const screenshotPath = path.join(config.screenshotDir, `${uuid}.png`);
-        await page.screenshot({ path: screenshotPath });
-        console.log(`Screenshot saved: ${screenshotPath}`);
-
-        const now = new Date().toISOString();
-        db.run(
-          `UPDATE sites SET screenshotPath = ?, modifiedTime = ?, currentlyBeingModified = 0 WHERE id = ?`,
-          [screenshotPath, now, id]
-        );
-      } catch (error) {
-        console.error(`Failed to process ${url}:`, error.message);
-        db.run(`UPDATE sites SET currentlyBeingModified = 0 WHERE id = ?`, [
-          id,
-        ]);
-      }
+  while (processingState === "running") {
+    const row = selectSiteStmt.get();
+    if (!row) {
+      console.log("No sites to process. Pausing...");
+      processingState = "paused";
+      continue;
     }
-  );
+
+    const { id, url, uuid } = row;
+
+    try {
+      updateSiteStmt.run(id);
+
+      const screenshotPath = path.join(config.screenshotDir, `${uuid}.png`);
+      const newPage = await browser.newPage();
+      console.log(`Navigating to URL: ${url}`);
+
+      // Attach adblocker to the new page
+      const blocker = await PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch);
+      blocker.enableBlockingInPage(newPage);
+
+      // Set User-Agent
+      await newPage.setUserAgent(config.userAgent);
+
+      // Navigate and take a screenshot
+      await newPage.goto(url, { waitUntil: "networkidle2", timeout: 30000 });
+      console.log(`Taking screenshot: ${screenshotPath}`);
+      await newPage.screenshot({ path: screenshotPath });
+      console.log(`Screenshot saved: ${screenshotPath}`);
+
+      const now = new Date().toISOString();
+      completeSiteStmt.run(screenshotPath, now, id);
+
+      await newPage.close(); // Ensure the tab is closed after processing
+    } catch (error) {
+      console.error(`Failed to process ${url}:`, error.message);
+      page.close();
+      resetSiteStmt.run(id);
+    }
+
+    while (processingState === "paused") {
+      console.log("Paused. Waiting to resume...");
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    if (processingState === "stopped") {
+      console.log("Stopped. Exiting...");
+      break;
+    }
+  }
 }
 
 // Ask User for Input
