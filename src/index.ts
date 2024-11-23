@@ -1,21 +1,13 @@
 import { v4 as uuidv4 } from "uuid";
 import Database from "better-sqlite3";
-import puppeteer from "puppeteer-core";
+import puppeteer from "puppeteer";
 import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer";
 import readline from "readline";
 import fs from "fs";
 import LogRocket from "logrocket";
 
-LogRocket.init('j1bibu/screenshotwebsite');
 const state = "./state.json";
 const config = "./config.json";
-const db = new Database('database.db');
-db.pragma('journal_mode = WAL'); // Using WAL mode is better for concurrent access https://github.com/WiseLibs/better-sqlite3/blob/master/docs/performance.md
-const browser = await puppeteer.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-});
-const page = await browser.newPage();
 
 // Generates config.json file if it doesn't exist
 if (!fs.existsSync(config)) {
@@ -36,6 +28,15 @@ if (!fs.existsSync(config)) {
     console.log("Config file generated. Please edit the config file to your liking.");
     process.exit();
 }
+
+LogRocket.init('j1bibu/screenshotwebsite');
+const db = new Database('database.db');
+db.pragma('journal_mode = WAL'); // Using WAL mode is better for concurrent access https://github.com/WiseLibs/better-sqlite3/blob/master/docs/performance.md
+const browser = await puppeteer.launch({
+    headless: config.headless,
+    //args: ['--no-sandbox', '--disable-setuid-sandbox']
+});
+const page = await browser.newPage();
 
 // Prevent WAL file from growing too large
 setInterval(fs.stat.bind(null, 'database.db-wal', (err, stat) => {
