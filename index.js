@@ -51,7 +51,9 @@ async function initializeBrowser() {
     browser = await puppeteer.launch({
         product: "chrome",
         executablePath,
-        headless: false
+        headless: config.headless,
+        width: config.width,
+        height: config.height
     });
 }
 
