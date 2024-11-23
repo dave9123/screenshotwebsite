@@ -7,6 +7,9 @@ A tool to screenshot websites automatically that has a queue system.
     <li>Install packages by running <code>bun install</code></li>
 </ol>
 
+# Running
+Run <code>bun index.js</code>
+
 # Usage
 - `add <URL>` Adds a URL to the database
 - `import <file>` Imports a text file and adds URL(s) splitted by new line to the database
