@@ -10,7 +10,7 @@ const config = JSON.parse(fs.readFileSync("./config.json", "utf8"));
 if (!fs.existsSync(config.screenshotDir)) {
   fs.mkdirSync(config.screenshotDir);
 }
-let processingState = "stopped"; // Initial state: stopped
+let processingState = "stopped"; // Initial state
 let browser;
 let page;
 
@@ -35,19 +35,11 @@ db.exec(`
 async function initializeBrowser() {
   const executablePath = config.browserPath;
   console.log(`Using browser at: ${executablePath}`);
-  browser = await puppeteer.launch({
+  await puppeteer.launch({
     product: "chrome",
     executablePath,
-    headless: true
+    headless: false,
   });
-  page = await browser.newPage();
-
-  // Load and enable the adblocker
-  const blocker = await PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch);
-  blocker.enableBlockingInPage(page);
-
-  // Set User-Agent from config
-  await page.setUserAgent(config.userAgent);
 }
 
 // Add Site to Database
@@ -82,7 +74,7 @@ async function processSites() {
   processingState = "running";
 
   const selectSiteStmt = db.prepare(`
-    SELECT * FROM sites WHERE screenshotPath IS NULL AND currentlyBeingModified = 0 LIMIT 1
+    SELECT * FROM sites WHERE screenshotPath IS NULL AND currentlyBeingModified = 0 AND retryCount < ${config.retries} LIMIT 1
   `);
 
   const updateSiteStmt = db.prepare(`
@@ -94,28 +86,33 @@ async function processSites() {
   `);
 
   const resetSiteStmt = db.prepare(`
-    UPDATE sites SET currentlyBeingModified = 0 WHERE id = ?
+    UPDATE sites SET currentlyBeingModified = 0, retryCount = retryCount + 1 WHERE id = ?
   `);
 
-  const skipSiteStmt = db.prepare(`
-    UPDATE sites SET currentlyBeingModified = 0 WHERE id = ?
+  const addRetriesStmt = db.prepare(`
+    UPDATE sites SET currentlyBeingModified = 0, retryCount = retryCount + 1 WHERE id = ?
   `);
+
+  //const skipSiteStmt = db.prepare(`
+  //  UPDATE sites SET currentlyBeingModified = 0, retryCount = 3 WHERE id = ?
+  //`);
 
   while (processingState === "running") {
     const row = selectSiteStmt.get();
-    if (!row) {
+    if (!row) {      
       console.log("No sites to process. Pausing...");
       processingState = "paused";
       continue;
     }
 
-    const { id, url, uuid } = row;
+    const { id, url, uuid, retryCount } = row;
 
+    let newPage;
     try {
       updateSiteStmt.run(id);
 
       const screenshotPath = path.join(config.screenshotDir, `${uuid}.png`);
-      const newPage = await browser.newPage();
+      newPage = await browser.newPage();
       console.log(`Navigating to URL: ${url}`);
 
       // Attach adblocker to the new page
@@ -133,17 +130,18 @@ async function processSites() {
 
       const now = new Date().toISOString();
       completeSiteStmt.run(screenshotPath, now, id);
-
-      await newPage.close(); // Ensure the tab is closed after processing
     } catch (error) {
       console.error(`Failed to process ${url}:`, error.message);
       if (retryCount + 1 >= 3) {
-        skipSiteStmt.run(id);
+        console.log(`Skipping ${url} after ${retryCount} failed attempts.`);
+        addRetriesStmt.run(id);
       } else {
         resetSiteStmt.run(id);
       }
     } finally {
-      await newPage.close();
+      if (newPage) {
+        await newPage.close(); // Ensure the tab is closed after processing
+      }
     }
 
     while (processingState === "paused") {
@@ -153,7 +151,11 @@ async function processSites() {
 
     if (processingState === "stopped") {
       console.log("Stopped. Exiting...");
-      break;
+      db.close();
+      if (browser) {
+        await browser.close();
+      }
+      process.exit(0);
     }
   }
 }
@@ -219,13 +221,13 @@ async function handleCommand(command) {
       break;
 
     case "exit":
-      console.log("Exiting...");
-      if (browser) {
-        await browser.close();
-      }
-      db.close();
-      process.exit();
-      break;
+      console.log("Waiting for last job to end...");
+      processingState = "stopped";
+      //if (browser) {
+      //  await browser.close();
+      //}
+      //db.close();
+      //process.exit();
 
     default:
       console.log(
