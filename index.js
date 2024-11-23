@@ -1,4 +1,4 @@
-import sqlite3 = require("sqlite3").verbose();
+const sqlite3 = require("sqlite3").verbose();
 const puppeteer = require("puppeteer-core");
 const { v4: uuidv4 } = require("uuid");
 const fs = require("fs");
@@ -42,11 +42,11 @@ async function discoverBrowsers() {
     console.log("No local browsers found.");
     const downloadBrowser = (await askUser(
       "No local browsers found. Do you want to download a browser? (yes/no): "
-    )) as string;
+    ));
     if (downloadBrowser.toLowerCase() === "yes") {
       const browserName = (await askUser(
         "Enter the name of the browser you want to use (e.g., chrome, firefox): "
-      )) as string;
+      ));
       const browserFetcher = puppeteer.createBrowserFetcher({
         product: browserName,
       });
@@ -55,7 +55,7 @@ async function discoverBrowsers() {
     } else {
       const customPath = (await askUser(
         "Enter path to a browser executable: "
-      )) as string;
+      ));
       return customPath.trim();
     }
   }
