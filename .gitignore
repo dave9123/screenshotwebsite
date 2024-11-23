@@ -1,5 +1,6 @@
 .git
 node_modules
 database.db*
-screenshots
+screenshots*
 *.txt
+links.txt
