@@ -237,6 +237,7 @@ async function handleCommand(command) {
                 db.close();
                 process.exit(0);
             }
+            break;
 
         default:
             console.log(
