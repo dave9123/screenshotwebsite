@@ -11,6 +11,7 @@ if (!fs.existsSync(config.screenshotDir)) {
   fs.mkdirSync(config.screenshotDir);
 }
 let processingState = "stopped"; // Initial state
+let currentJob = "none"; // Initial job
 let browser;
 let page;
 
@@ -38,7 +39,7 @@ async function initializeBrowser() {
   await puppeteer.launch({
     product: "chrome",
     executablePath,
-    headless: false,
+    headless: false
   });
 }
 
@@ -109,6 +110,7 @@ async function processSites() {
 
     let newPage;
     try {
+      currentJob = url;
       updateSiteStmt.run(id);
 
       const screenshotPath = path.join(config.screenshotDir, `${uuid}.png`);
@@ -221,8 +223,19 @@ async function handleCommand(command) {
       break;
 
     case "exit":
-      console.log("Waiting for last job to end...");
       processingState = "stopped";
+      if (currentJob !== "none") {
+        console.log("Waiting for last job to end...");
+      } else {
+        console.log("Exiting...");
+        if (browser) {
+          await browser.close();
+        }
+        db.close();
+        process.exit();
+      }
+      
+      break;
       //if (browser) {
       //  await browser.close();
       //}
