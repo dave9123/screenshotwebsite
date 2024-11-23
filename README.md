@@ -3,6 +3,7 @@ A tool to screenshot websites automatically that has a queue system.
 
 # Setup
 <ol type="1">
+    <li>Make sure you have [Bun](https://bun.sh/) installed</li>
     <li>Install packages by running <code>bun install</code></li>
 </ol>
 
