@@ -1,5 +1,5 @@
 # ScreenshotWebsite
-I made this to screenshot online betting sites to automate reporting to the government.
+A tool to screenshot websites automatically that has a queue system.
 
 # Setup
 <ol type="1">
