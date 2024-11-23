@@ -26,7 +26,8 @@ db.exec(`
     screenshotPath TEXT,
     createdTime TEXT NOT NULL,
     modifiedTime TEXT,
-    currentlyBeingModified INTEGER DEFAULT 0
+    currentlyBeingModified INTEGER DEFAULT 0,
+    retryCount INTEGER DEFAULT 0
   )
 `);
 
@@ -37,7 +38,7 @@ async function initializeBrowser() {
   browser = await puppeteer.launch({
     product: "chrome",
     executablePath,
-    headless: false
+    headless: true
   });
   page = await browser.newPage();
 
@@ -96,6 +97,10 @@ async function processSites() {
     UPDATE sites SET currentlyBeingModified = 0 WHERE id = ?
   `);
 
+  const skipSiteStmt = db.prepare(`
+    UPDATE sites SET currentlyBeingModified = 0 WHERE id = ?
+  `);
+
   while (processingState === "running") {
     const row = selectSiteStmt.get();
     if (!row) {
@@ -132,8 +137,13 @@ async function processSites() {
       await newPage.close(); // Ensure the tab is closed after processing
     } catch (error) {
       console.error(`Failed to process ${url}:`, error.message);
-      page.close();
-      resetSiteStmt.run(id);
+      if (retryCount + 1 >= 3) {
+        skipSiteStmt.run(id);
+      } else {
+        resetSiteStmt.run(id);
+      }
+    } finally {
+      await newPage.close();
     }
 
     while (processingState === "paused") {
