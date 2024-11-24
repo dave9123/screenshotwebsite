@@ -75,7 +75,7 @@ async function initializeBrowser() {
         executablePath,
         headless: config.headless
     });
-}
+};
 
 // Add Site to Database
 function addSite(url) {
@@ -130,7 +130,7 @@ async function processSites() {
             continue;
         }
 
-        const { id, url, uuid, retryCount } = row;
+        const { id, url, uuid } = row;
 
         let newPage;
         try {
@@ -138,6 +138,10 @@ async function processSites() {
 
             const screenshotPath = path.join(config.screenshotDir, `${uuid}.png`);
             newPage = await browser.newPage();
+            const pages = await browser.pages();
+            if (pages.length > 1) {
+                await pages[0].close();
+            }
             console.log(`Navigating to URL: ${url}`);
             currentJob = `Navigating to ${url}`;
 
@@ -164,7 +168,7 @@ async function processSites() {
             resetSiteStmt.run(id);
         } finally {
             if (newPage) {
-                await newPage.close();
+                await newPage.goto("about:blank");
             }
         }
 
