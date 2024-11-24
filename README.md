@@ -61,4 +61,5 @@ Run <code>bun index.js</code>
 -   `import <file>` Imports a text file and adds URL(s) splitted by new line to the database
 -   `start` Start or resume job(s)
 -   `pause` Pauses job(s)
+-   `clear` Clears screen on terminal
 -   `exit` Close browser and database then exits
