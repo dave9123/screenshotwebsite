@@ -1,6 +1,7 @@
 import { Database } from "bun:sqlite";
 import puppeteer from "puppeteer-extra";
-import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer";
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+import AdblockerPlugin from "puppeteer-extra-plugin-adblocker"
 import { v4 as uuidv4 } from "uuid";
 import fs from "fs";
 import path from "path";
@@ -25,6 +26,14 @@ let processingState = "stopped"; // Initial state
 let currentJob = "none"; // Initial job
 let browser;
 let page;
+
+// Puppeteer plugin initialization
+puppeteer.use(AdblockerPlugin({
+    blockTrackers: true,
+    blockTrackersAndAnnoyances: true,
+    useCache: true
+}));
+puppeteer.use(StealthPlugin())
 
 // Database Initialization
 const db = new Database("./database.db");
@@ -130,10 +139,6 @@ async function processSites() {
             newPage = await browser.newPage();
             console.log(`Navigating to URL: ${url}`);
             currentJob = `Navigating to ${url}`;
-
-            // Attach adblocker to the new page
-            const blocker = await PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch);
-            blocker.enableBlockingInPage(newPage);
 
             // Set viewport
             await newPage.setViewport({
