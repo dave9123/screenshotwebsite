@@ -49,6 +49,10 @@ A tool to screenshot websites automatically that has a queue system.
         <code>browser</code>
         <p>Browser type that is used (make sure this matches with the browser set on browserPath), option: <code>chrome</code>, example: <code>chrome</code></p>
     </li>
+    <li>
+        <code>keepHistoryOnClear</code>
+        <p><a href="https://www.npmjs.com/package/console-clear">Clears console but keeps scrollback history intact</a>, options: <code>true</code> and <code>false</code>, example: <code>false</code></p>
+    </li>
 </ul>
 
 # Running

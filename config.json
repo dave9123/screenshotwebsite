@@ -7,5 +7,6 @@
     "width": 1920,
     "headless": false,
     "dumpio": false,
-    "browser": "chrome"
+    "browser": "chrome",
+    "keepHistoryOnClear": false
 }

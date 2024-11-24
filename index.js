@@ -244,7 +244,7 @@ async function handleCommand(command) {
             break;
 
         case "clear":
-            console.clear();
+            process.stdout.write(process.env.keepHistoryOnClear ? "\x1B[H\x1B[2J" : "\x1B[2J\x1B[3J\x1B[H\x1Bc")
             break;
 
         case "exit":
