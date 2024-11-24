@@ -33,7 +33,7 @@ A tool to screenshot websites automatically that has a queue system.
         <p>Screenshot height, example: <code>1920</code></p>
     </li>
     <li>
-        <code>width</cdoe>
+        <code>width</code>
         <p>Screenshot width, example: <code>1080</code></p>
     </li>
     <li>
