@@ -4,3 +4,4 @@ database.db*
 screenshots*
 *.txt
 links.txt
+.env

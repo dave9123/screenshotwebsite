@@ -1,10 +1,21 @@
 import { Database } from "bun:sqlite";
-import puppeteer from "puppeteer-core";
+import puppeteer from "puppeteer-extra";
 import { PuppeteerBlocker } from "@ghostery/adblocker-puppeteer";
 import { v4 as uuidv4 } from "uuid";
 import fs from "fs";
 import path from "path";
 import readline from "readline";
+import * as Sentry from "@sentry/node";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+if (process.env.SENTRY_DSN) {
+    Sentry.init({
+        dsn: process.env.SENTRY_DSN,
+        tracesSampleRate: 1.0
+    });
+}
 
 const config = JSON.parse(fs.readFileSync("./config.json", "utf8"));
 if (!fs.existsSync(config.screenshotDir)) {
@@ -49,11 +60,10 @@ async function initializeBrowser() {
     const executablePath = config.browserPath;
     console.log(`Using browser at: ${executablePath}`);
     browser = await puppeteer.launch({
-        product: "chrome",
+        browser: config.browser,
+        dumpio: config.dumpio,
         executablePath,
-        headless: config.headless,
-        width: config.width,
-        height: config.height
+        headless: config.headless
     });
 }
 
@@ -103,7 +113,7 @@ async function processSites() {
   `);
 
     while (processingState === "running") {
-        const row = selectSiteStmt.get(config.retries);
+        const row = selectSiteStmt.get(config.retryLimit);
         if (!row) {
             console.log("No sites to process. Pausing...");
             processingState = "paused";
@@ -124,6 +134,13 @@ async function processSites() {
             // Attach adblocker to the new page
             const blocker = await PuppeteerBlocker.fromPrebuiltAdsAndTracking(fetch);
             blocker.enableBlockingInPage(newPage);
+
+            // Set viewport
+            await newPage.setViewport({
+                width: config.width,
+                height: config.height,
+                deviceScaleFactor: 1
+            })
 
             // Set User-Agent
             await newPage.setUserAgent(config.userAgent);
@@ -216,11 +233,6 @@ async function handleCommand(command) {
             console.log("Paused processing.");
             break;
 
-        case "resume":
-            processingState = "running";
-            console.log("Resumed processing.");
-            break;
-
         case "clear":
             console.clear();
             break;
@@ -241,7 +253,7 @@ async function handleCommand(command) {
 
         default:
             console.log(
-                "Unknown command. Commands: add <URL>, import <filename>, status, start, pause, resume, clear, exit"
+                "Unknown command. Commands: add <URL>, import <filename>, status, start, pause, clear, exit"
             );
     }
 }
@@ -254,7 +266,7 @@ async function startTerminalInterface() {
     });
 
     console.log(
-        "Commands: add <URL>, import <filename>, start, pause, resume, clear, exit"
+        "Commands: add <URL>, import <filename>, start, pause, clear, exit"
     );
 
     rl.on("line", async (line) => {

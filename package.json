@@ -7,10 +7,11 @@
   "dependencies": {
     "@ghostery/adblocker-puppeteer": "^2.1.1",
     "@sentry/node": "^8.40.0",
-    "@sentry/profiling-node": "^8.40.0",
+    "dotenv": "^16.4.5",
     "logrocket": "^9.0.0",
     "puppeteer": "^23.9.0",
     "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-adblocker": "^2.13.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "sqlite3": "^5.1.7",
     "uuid": "^11.0.3"
