@@ -66,7 +66,7 @@ db.run(`
 
 // Initialize Puppeteer
 async function initializeBrowser() {
-    console.log(`Available evasions: ${StealthPlugin().availableEvasions}`)
+    console.log(`Available evasions: ${StealthPlugin.availableEvasions}`)
     const executablePath = config.browserPath;
     console.log(`Using browser at: ${executablePath}`);
     browser = await puppeteer.launch({
