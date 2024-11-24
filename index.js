@@ -28,6 +28,7 @@ let browser;
 let page;
 
 // Puppeteer plugin initialization
+console.log(`Available evasions: ${StealthPlugin().availableEvasions}\nEnabled evasions: ${StealthPlugin().enabledEvasions}`)
 puppeteer.use(AdblockerPlugin({
     blockTrackers: true,
     blockTrackersAndAnnoyances: true,
@@ -44,7 +45,9 @@ db.run(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     uuid TEXT NOT NULL UNIQUE,
     url TEXT NOT NULL,
+    screenshottedUrl TEXT,
     domain TEXT NOT NULL,
+    screenshottedDomain TEXT,
     screenshotPath TEXT,
     createdTime DATETIME DEFAULT CURRENT_TIMESTAMP,
     modifiedTime DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -66,14 +69,16 @@ db.run(`
 
 // Initialize Puppeteer
 async function initializeBrowser() {
-    console.log(`Available evasions: ${StealthPlugin.availableEvasions}`)
     const executablePath = config.browserPath;
     console.log(`Using browser at: ${executablePath}`);
     browser = await puppeteer.launch({
         browser: config.browser,
         dumpio: config.dumpio,
         executablePath,
-        headless: config.headless
+        headless: config.headless,
+        //extraPrefsFirefox: {
+        //    "remote.log.level": "Trace"
+        //},
     });
 };
 
@@ -115,10 +120,10 @@ async function processSites() {
   `);
 
     const completeSiteStmt = db.prepare(`
-    UPDATE sites SET screenshotPath = ?, modifiedTime = CURRENT_TIMESTAMP, currentlyBeingModified = 0 WHERE id = ?
+    UPDATE sites SET screenshotPath = ?, screenshottedDomain = ?, screenshottedUrl = ?, modifiedTime = CURRENT_TIMESTAMP, currentlyBeingModified = 0 WHERE id = ?
   `);
 
-    const resetSiteStmt = db.prepare(`
+    const retrySiteStmt = db.prepare(`
     UPDATE sites SET currentlyBeingModified = 0, retryCount = retryCount + 1 WHERE id = ?
   `);
 
@@ -145,7 +150,7 @@ async function processSites() {
             console.log(`Navigating to URL: ${url}`);
             currentJob = `Navigating to ${url}`;
 
-            // Set viewport
+            // Set Viewport
             await newPage.setViewport({
                 width: config.width,
                 height: config.height,
@@ -162,10 +167,10 @@ async function processSites() {
             await newPage.screenshot({ path: screenshotPath });
             console.log(`Screenshot saved: ${screenshotPath}`);
             currentJob = "none";
-            completeSiteStmt.run(screenshotPath, id);
+            completeSiteStmt.run(screenshotPath, new URL(newPage.url()).hostname, newPage.url(), id);
         } catch (error) {
             console.error(`Failed to process ${url}:`, error.message);
-            resetSiteStmt.run(id);
+            retrySiteStmt.run(id);
         } finally {
             if (newPage) {
                 await newPage.goto("about:blank");
