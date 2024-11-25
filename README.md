@@ -71,3 +71,12 @@ Run <code>bun index.js</code>
 -   `pause` Pauses job(s)
 -   `clear` Clears screen on terminal
 -   `exit` Close browser and database then exits
+
+# Todo
+
+<ol type="1">
+    <li>Bypass Cloudflare UAM</li>
+    <li>Make UI</li>
+    <li>Support command arguments</li>
+    <li>Support other browsers</li>
+</ol>
