@@ -1,8 +1,14 @@
 {
+  "name": "screenshotwebsite",
+  "version": "0.0.0",
+  "description": "A tool to screenshot websites automatically that has a queue system.",
+  "main": "index.js",
+  "author": "dave9123",
   "scripts": {
     "start": "index.js",
     "start:dev": "nodemon index.js",
-    "test": "jest"
+    "test": "jest",
+    "generateLockfile": "npm install --package-lock-only"
   },
   "dependencies": {
     "@sentry/node": "^8.40.0",
@@ -15,6 +21,15 @@
   },
   "devDependencies": {
     "eslint": "^9.15.0",
-    "jest": "^29.7.0"
-  }
+    "jest": "^29.7.0",
+    "prettier": "^3.3.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dave9123/screenshotwebsite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dave9123/screenshotwebsite/issues"
+  },
+  "homepage": "https://github.com/dave9123/screenshotwebsite#readme"
 }
