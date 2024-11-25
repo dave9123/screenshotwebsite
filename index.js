@@ -69,12 +69,11 @@ db.run(`
 
 // Initialize Puppeteer
 async function initializeBrowser() {
-    const executablePath = config.browserPath;
     console.log(`Using browser at: ${executablePath}`);
     browser = await puppeteer.launch({
         browser: config.browser,
         dumpio: config.dumpio,
-        executablePath,
+        executablePath: config.executablePath,
         headless: config.headless,
         //extraPrefsFirefox: {
         //    "remote.log.level": "Trace"
