@@ -18,7 +18,7 @@ if (process.env.SENTRY_DSN) {
     });
 }
 
-const config = JSON.parse(fs.readFileSync("./config.json", "utf8"));
+const config = require("./config.json");
 if (!fs.existsSync(config.screenshotDir)) {
     fs.mkdirSync(config.screenshotDir);
 }
@@ -69,11 +69,11 @@ db.run(`
 
 // Initialize Puppeteer
 async function initializeBrowser() {
-    console.log(`Using browser at: ${executablePath}`);
+    console.log(`Using browser at: ${config.browserPath}`);
     browser = await puppeteer.launch({
         browser: config.browser,
         dumpio: config.dumpio,
-        executablePath: config.executablePath,
+        executablePath: config.browserPath,
         headless: config.headless,
         //extraPrefsFirefox: {
         //    "remote.log.level": "Trace"
@@ -151,8 +151,8 @@ async function processSites() {
 
             // Set Viewport
             await newPage.setViewport({
-                width: config.width,
-                height: config.height,
+                width: config.viewportWidth,
+                height: config.viewportHeight,
                 deviceScaleFactor: 1
             })
 
@@ -176,11 +176,6 @@ async function processSites() {
             }
         }
 
-        while (processingState === "paused") {
-            console.log("Paused. Waiting to resume...");
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-
         if (processingState === "stopped") {
             console.log("Stopped. Exiting...");
             db.close();
@@ -192,19 +187,6 @@ async function processSites() {
     }
 }
 
-// Ask User for Input
-function askUser(question) {
-    return new Promise((resolve) => {
-        const rl = readline.createInterface({
-            input: process.stdin,
-            output: process.stdout,
-        });
-        rl.question(question, (answer) => {
-            rl.close();
-            resolve(answer);
-        });
-    });
-}
 
 // Terminal Interface
 async function handleCommand(command) {

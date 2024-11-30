@@ -33,11 +33,11 @@ A tool to screenshot websites automatically that has a queue system.
         <p>Limit how many times to retry on error before skipping, example: <code>1</code></p>
     </li>
     <li>
-        <code>height</code>
+        <code>viewportHeight</code>
         <p>Screenshot height, example: <code>1920</code></p>
     </li>
     <li>
-        <code>width</code>
+        <code>viewportWidth</code>
         <p>Screenshot width, example: <code>1080</code></p>
     </li>
     <li>
