@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import fs from "fs";
 const db = new Database("database.db");
 const target = "output.txt";
-const list = db.query("SELECT * FROM sites WHERE currentlyBeingModified = 0 AND screenshotPath NOT NULL").get();
+const list = db.query("SELECT * FROM sites WHERE currentlyBeingModified = 0 AND screenshotPath NOT NULL").all();
 const seenUrls = new Set(); // Prevent duplicates
 for (const site of list) {
     if (!seenUrls.has(site.url)) {

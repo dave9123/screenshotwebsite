@@ -75,6 +75,7 @@ Run <code>bun index.js</code>
 # Todo
 
 <ol type="1">
+    <li>Try catch handler for process sites function</li>
     <li>Bypass Cloudflare UAM</li>
     <li>Make UI</li>
     <li>Support command arguments</li>
