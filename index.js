@@ -215,6 +215,7 @@ async function handleCommand(command) {
         case "status":
             console.log(`Processing State: ${processingState}`);
             console.log(`Current Job: ${currentJob}`);
+            break;
 
         case "start":
             if (processingState === "running") {
