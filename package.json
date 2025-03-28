@@ -11,7 +11,7 @@
     "generateLockfile": "npm install --package-lock-only"
   },
   "dependencies": {
-    "@sentry/node": "^8.54.0",
+    "@sentry/node": "^9.10.1",
     "dotenv": "^16.4.7",
     "puppeteer": "^24.4.0",
     "puppeteer-extra": "^3.3.6",
