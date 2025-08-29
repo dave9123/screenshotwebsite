@@ -6,17 +6,9 @@ import { v4 as uuidv4 } from "uuid";
 import fs from "fs";
 import path from "path";
 import readline from "readline";
-import * as Sentry from "@sentry/node";
 import dotenv from "dotenv";
 
 dotenv.config();
-
-if (process.env.SENTRY_DSN) {
-    Sentry.init({
-        dsn: process.env.SENTRY_DSN,
-        tracesSampleRate: 1.0
-    });
-}
 
 const config = require("./config.json");
 if (!fs.existsSync(config.screenshotDir)) {
